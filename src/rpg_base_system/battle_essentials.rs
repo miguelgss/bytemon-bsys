@@ -1,5 +1,5 @@
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EType {
     Free = 1,
     Vaccine = 2,
@@ -23,7 +23,7 @@ impl EType {
 }
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EAttribute {
     Fire = 1,
     Water = 2,
@@ -63,7 +63,7 @@ impl EAttribute {
 }
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ELevel {
     Rookie = 1,
     Champion = 2,
@@ -73,15 +73,79 @@ pub enum ELevel {
     Armor = 6,
 }
 
-pub enum ECondition {}
+#[derive(Debug, PartialEq, Clone)]
+pub enum ECondition {
+    Defending,
+}
 
+#[derive(Debug, Clone)]
 pub enum EBuff {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub enum ETypeAttack {
+    Physical,
+    Wisdom,
+}
+
+#[derive(Debug, Clone)]
+pub enum ETypeTarget {
+    OneEnemy,
+    AllEnemies,
+    OneAlly,
+    AllAllies,
+}
+
+#[derive(Debug, Clone)]
+pub struct SpecialAttack {
+    pub attribute: EAttribute,
+    pub cost: i16,
+    pub damage_value: i16,
+    pub cure_value: i16,
+    pub condition_effect: Option<(ECondition, i8)>,
+    pub buff_effect: Option<(EBuff, i8)>,
+    pub type_attack: ETypeAttack,
+    pub type_target: ETypeTarget,
+}
+
+impl SpecialAttack {
+    fn new_simple_attack(
+        attribute: EAttribute,
+        type_attack: ETypeAttack,
+        type_target: ETypeTarget,
+        damage_value: i16,
+        cost: i16,
+    ) -> Self {
+        Self {
+            attribute,
+            type_attack,
+            type_target,
+            damage_value,
+            cost,
+            cure_value: 0,
+            condition_effect: None,
+            buff_effect: None,
+        }
+    }
+
+    pub fn wolkenapalm1_f_p() -> Self {
+        SpecialAttack::new_simple_attack(
+            EAttribute::Fire,
+            ETypeAttack::Physical,
+            ETypeTarget::OneEnemy,
+            65,
+            3,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Battler {
     pub id: u8,
     pub level: u8,
     pub name: String,
+    pub conditions: Vec<(ECondition, i8)>,
+    pub buffs: Vec<EBuff>,
+    pub special_attacks: Vec<SpecialAttack>,
     pub status: Status,
     pub characteristics: Characteristics,
     total_exp: u32,
@@ -95,6 +159,9 @@ impl Default for Battler {
             level: 1,
             name: "battler".to_owned(),
             status: Status::default(),
+            conditions: vec![],
+            buffs: vec![],
+            special_attacks: vec![],
             characteristics: Characteristics::new(EType::Free, EAttribute::Neutral, ELevel::Rookie),
             total_exp: 0,
             next_lv_exp: 10,
@@ -108,6 +175,9 @@ impl Battler {
         level: u8,
         name: String,
         status: Status,
+        conditions: Vec<(ECondition, i8)>,
+        buffs: Vec<EBuff>,
+        special_attacks: Vec<SpecialAttack>,
         characteristics: Characteristics,
         total_exp: u32,
         next_lv_exp: u16,
@@ -117,6 +187,9 @@ impl Battler {
             level,
             name,
             status,
+            conditions,
+            buffs,
+            special_attacks,
             characteristics,
             total_exp,
             next_lv_exp,
@@ -139,12 +212,28 @@ impl Battler {
         b.take_damage(dmg_calc.round() as i16);
     }
 
+    pub fn special_attack_start(&self, sp: SpecialAttack, targets: &mut Vec<Battler>) {
+        match sp.type_target {
+            ETypeTarget::OneEnemy => (),
+            ETypeTarget::AllEnemies => (),
+            _ => (),
+        }
+    }
+
     pub fn take_damage(&mut self, d: i16) {
-        self.status.take_damage(d);
+        if self
+            .conditions
+            .iter()
+            .any(|(x, y)| x == &ECondition::Defending && *y > 0)
+        {
+            self.status.take_damage(d / 2);
+        } else {
+            self.status.take_damage(d);
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Status {
     pub hp: i16,
     pub mp: i16,
@@ -173,11 +262,21 @@ impl Status {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Characteristics {
     pub type_alignment: EType,
     pub attribute: EAttribute,
-    evo_level: ELevel,
+    pub evo_level: ELevel,
+}
+
+impl Default for Characteristics {
+    fn default() -> Self {
+        Self {
+            type_alignment: EType::Free,
+            attribute: EAttribute::Neutral,
+            evo_level: ELevel::Rookie,
+        }
+    }
 }
 
 impl Characteristics {
@@ -186,6 +285,51 @@ impl Characteristics {
             type_alignment,
             attribute,
             evo_level,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct BattleTeam<const fr_limit: usize> {
+    frontrow: [Battler; fr_limit],
+    backrow: Option<[Battler; 3]>,
+}
+
+pub struct BattleManager {
+    allies: BattleTeam<3>,
+    enemies: BattleTeam<3>,
+    turn_count: u8,
+    ids_turn_order_preview: [u8; 15],
+}
+
+impl BattleManager {
+    fn new_define_teams(allies: BattleTeam<3>, enemies: BattleTeam<3>) -> Self {
+        Self {
+            allies,
+            enemies,
+            turn_count: 0,
+            ids_turn_order_preview: [0; 15],
+        }
+    }
+
+    fn get_all_battlers(self) -> Vec<Battler> {
+        let mut all_battlers = self.allies.frontrow.to_vec();
+        all_battlers.extend(self.enemies.frontrow);
+
+        all_battlers
+    }
+
+    fn calculate_turn_order(self) {
+        let mut all_battlers: Vec<(Battler, i16)> = self
+            .get_all_battlers()
+            .into_iter()
+            .map(|x| (x, 0))
+            .rev()
+            .collect();
+        loop {
+            for i in 0..all_battlers.len() {
+                all_battlers[i].1 += all_battlers[i].0.status.agility;
+            }
         }
     }
 }

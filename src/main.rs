@@ -1,5 +1,6 @@
 use bytemon_bsys::rpg_base_system::battle_essentials::Battler;
 use bytemon_bsys::rpg_base_system::battle_essentials::EType;
+use bytemon_bsys::rpg_base_system::battle_essentials::SpecialAttack;
 
 fn main() {
     let mut b1 = Battler::default();
@@ -11,6 +12,7 @@ fn main() {
     b2.name = "Patamon".to_owned();
     b1.basic_attack(&mut b2);
 
+    b1.special_attacks.push(SpecialAttack::wolkenapalm1_f_p());
     println!("{b1:?} \n VS \n {b2:?}");
     println!("Hello, world!");
 
