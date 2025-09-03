@@ -290,9 +290,15 @@ impl Characteristics {
 }
 
 #[derive(Clone)]
+pub struct BattlerTimer {
+    turn_cooldown: i16,
+    battler: Battler,
+}
+
+#[derive(Clone)]
 pub struct BattleTeam<const fr_limit: usize> {
-    frontrow: [Battler; fr_limit],
-    backrow: Option<[Battler; 3]>,
+    frontrow: [BattlerTimer; fr_limit],
+    backrow: Option<[BattlerTimer; 3]>,
 }
 
 pub struct BattleManager {
@@ -312,24 +318,84 @@ impl BattleManager {
         }
     }
 
-    fn get_all_battlers(self) -> Vec<Battler> {
+    fn get_all_battlers(self) -> Vec<BattlerTimer> {
         let mut all_battlers = self.allies.frontrow.to_vec();
         all_battlers.extend(self.enemies.frontrow);
 
         all_battlers
     }
 
-    fn calculate_turn_order(self) {
-        let mut all_battlers: Vec<(Battler, i16)> = self
-            .get_all_battlers()
-            .into_iter()
-            .map(|x| (x, 0))
-            .rev()
-            .collect();
+    fn calculate_turn_order(self) -> Option<BattlerTimer> {
+        let mut all_battlers = self.get_all_battlers();
         loop {
-            for i in 0..all_battlers.len() {
-                all_battlers[i].1 += all_battlers[i].0.status.agility;
+            all_battlers
+                .iter_mut()
+                .for_each(|x| x.turn_cooldown += x.battler.status.agility);
+
+            if let Some(battler) = all_battlers.iter_mut().find(|x| x.turn_cooldown > 100) {
+                battler.turn_cooldown = -10;
+                break Some(battler.clone());
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_battle_manager {
+
+    use super::*;
+    #[test]
+    fn test_turn_calc() {
+        let mut allies = BattleTeam {
+            frontrow: [
+                BattlerTimer {
+                    battler: Battler::default(),
+                    turn_cooldown: 0,
+                },
+                BattlerTimer {
+                    battler: Battler::default(),
+                    turn_cooldown: 0,
+                },
+                BattlerTimer {
+                    battler: Battler::default(),
+                    turn_cooldown: 0,
+                },
+            ],
+            backrow: None,
+        };
+
+        allies.frontrow[0].battler.id = 2;
+        allies.frontrow[0].battler.status.agility = 5;
+        allies.frontrow[1].battler.id = 3;
+        allies.frontrow[1].battler.status.agility = 8;
+        allies.frontrow[2].battler.id = 4;
+        allies.frontrow[2].battler.status.agility = 12;
+
+        let mut enemies = BattleTeam {
+            frontrow: [
+                BattlerTimer {
+                    battler: Battler::default(),
+                    turn_cooldown: 0,
+                },
+                BattlerTimer {
+                    battler: Battler::default(),
+                    turn_cooldown: 0,
+                },
+                BattlerTimer {
+                    battler: Battler::default(),
+                    turn_cooldown: 0,
+                },
+            ],
+            backrow: None,
+        };
+
+        let bm = BattleManager::new_define_teams(allies, enemies);
+
+        let battler_result = bm.calculate_turn_order();
+
+        if let Some(b) = battler_result {
+            assert_eq!(b.battler.id, 4);
+            assert!(b.turn_cooldown < 0);
         }
     }
 }
