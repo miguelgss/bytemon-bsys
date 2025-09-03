@@ -97,6 +97,7 @@ pub enum ETypeTarget {
 
 #[derive(Debug, Clone)]
 pub struct SpecialAttack {
+    pub name: String,
     pub attribute: EAttribute,
     pub cost: i16,
     pub damage_value: i16,
@@ -109,6 +110,7 @@ pub struct SpecialAttack {
 
 impl SpecialAttack {
     fn new_simple_attack(
+        name: String,
         attribute: EAttribute,
         type_attack: ETypeAttack,
         type_target: ETypeTarget,
@@ -116,6 +118,7 @@ impl SpecialAttack {
         cost: i16,
     ) -> Self {
         Self {
+            name,
             attribute,
             type_attack,
             type_target,
@@ -129,6 +132,7 @@ impl SpecialAttack {
 
     pub fn wolkenapalm1_f_p() -> Self {
         SpecialAttack::new_simple_attack(
+            "Wolkenapalm".to_owned(),
             EAttribute::Fire,
             ETypeAttack::Physical,
             ETypeTarget::OneEnemy,
@@ -296,9 +300,19 @@ pub struct BattlerTimer {
 }
 
 #[derive(Clone)]
-pub struct BattleTeam<const fr_limit: usize> {
-    frontrow: [BattlerTimer; fr_limit],
+pub struct BattleTeam<const FR_LIMIT: usize> {
+    frontrow: [BattlerTimer; FR_LIMIT],
     backrow: Option<[BattlerTimer; 3]>,
+}
+
+enum MenuBattleOptions {
+    Attack,
+    Guard,
+    Skill,
+    Item,
+
+    Change,
+    Escape,
 }
 
 pub struct BattleManager {
@@ -365,13 +379,13 @@ mod tests_battle_manager {
         };
 
         allies.frontrow[0].battler.id = 2;
-        allies.frontrow[0].battler.status.agility = 5;
+        allies.frontrow[0].battler.status.agility = 12;
         allies.frontrow[1].battler.id = 3;
-        allies.frontrow[1].battler.status.agility = 8;
+        allies.frontrow[1].battler.status.agility = 12;
         allies.frontrow[2].battler.id = 4;
         allies.frontrow[2].battler.status.agility = 12;
 
-        let mut enemies = BattleTeam {
+        let enemies = BattleTeam {
             frontrow: [
                 BattlerTimer {
                     battler: Battler::default(),
